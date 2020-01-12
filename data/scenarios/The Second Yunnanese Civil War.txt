@@ -1,0 +1,45 @@
+Вторая Юньнаньская Гражданская Война
+5 2 1927
+yue
+
+wa:33
+li_xuanting:25 26 27 28 29
+long_yun:4 5 6 7 8 9 13
+zhang_ruji:0 1 2 3 10
+hu_ruoyi:17 18 19 20
+wang_ruwei:21
+mo_pu:22 23
+wu_xuexian:11
+
+50 35 50 10 zhang_ruji
+50 35 50 1 zhang_ruji
+50 35 50 25 li_xuanting
+50 25 50 28 li_xuanting
+50 25 50 29 li_xuanting
+50 25 50 17 hu_ruoyi
+50 25 50 18 hu_ruoyi
+50 25 50 18 hu_ruoyi
+50 25 50 19 hu_ruoyi
+50 25 50 21 wang_ruwei
+50 25 50 21 wang_ruwei
+50 25 50 30 yue
+50 25 50 31 yue
+50 25 50 32 yue
+50 25 50 34 yue
+50 25 50 35 yue
+50 25 50 36 yue
+50 25 50 8 long_yun
+50 25 50 8 long_yun
+50 25 50 8 long_yun
+50 25 50 13 long_yun
+50 25 50 13 long_yun
+50 25 50 11 wu_xuexian
+50 25 50 23 mo_pu
+
+war yue zhang_ruji
+war yue li_xuanting
+war yue hu_ruoyi
+war yue long_yun
+war wang_ruwei hu_ruoyi
+war wang_ruwei yue
+war yue wu_xuexian
