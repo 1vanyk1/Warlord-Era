@@ -248,13 +248,24 @@ def attack_enemy(country, enemy):  # атака на врага
             for j in gamemap.can_go[i]:  # узнаём, куда она может напасть
                 if gamemap.board[j] == enemy:
                     c += 1
-                    if len(get_army_of_province(k.return_pos())) > 1:
-                        border.append(j)
+                    border.append(j)
                     if len(get_army_of_province(j)) == 0:
                         maybe_go.append(j)
             if border:  # нападаем (если можем)
-                k.find_path(random.sample(border, 1)[0])
-            elif len(maybe_go) == 1 and c == 1:
+                if len(get_army_of_province(k.return_pos())) > 1 or random.randint(0, 3) == 1:
+                    k.find_path(random.sample(border, 1)[0])
+                elif len(border) == 1:  # узнаём, могут ли нам помочь наши соседи
+                    t = False
+                    for j in gamemap.can_go[border[0]]:  # узнаём, куда она может напасть
+                        if gamemap.board[j] == country:
+                            divs = get_army_of_province(j, country)
+                            for div in divs:
+                                if not div.is_moving():
+                                    div.find_path(border[0])
+                                    t = True
+                    if t:
+                        k.find_path(border[0])
+            elif len(maybe_go) == 1 and c == 1 or random.randint(0, 3) == 1 and maybe_go:
                 k.find_path(maybe_go[0])
 
 
@@ -613,7 +624,8 @@ class Provinces:
 
     def actions_with_provinces(self):
         for i in range(self.len_m):
-            self.happiness[i] -= random.randint(-1, 1)
+            if random.randint(1, 3) == 1:
+                self.happiness[i] -= random.randint(-1, 1)
             if self.happiness[i] < 10 and random.randint(1, 5) == 1:
                 self.happiness[i] = 60
                 count_under_reb = self.board[i]
@@ -803,7 +815,7 @@ def create_event():
         declare_war(gamemap.board[14], 'jiang_jieba')
         gamemap.update_province(23, 'jiang_jieba')
         divisions.append(Division(50, 30, 50, 23, 'jiang_jieba'))
-    elif date == [20, 1, 1928]:
+    elif date == [14, 12, 1928]:
         declare_war(gamemap.board[5], 'li_shen')
         declare_war(gamemap.board[6], 'li_shen')
         declare_war(gamemap.board[7], 'li_shen')
@@ -1078,11 +1090,11 @@ all_sprites.add(sprite)
 self_change_light = [0, True]
 
 MYEVENTTYPE = 30
-pygame.time.set_timer(MYEVENTTYPE, 10)
+pygame.time.set_timer(MYEVENTTYPE, 20)
 load_game()
 
 wait_ticks = 0
-ADD_TICKS = 4
+ADD_TICKS = 8
 time_is_running = False
 while running:
     for event in pygame.event.get():
