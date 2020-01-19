@@ -5,7 +5,14 @@ import math
 import sqlite3
 
 
+def reload_menu_opened():
+    global menu_opened  # Меню (открыты ли) \/
+    menu_opened = {'division': False, 'province': False, 'diplo': False, 'country_choose': False,
+                   'end_game': False}
+
+
 pygame.init()  # Создаём игровое окно
+pygame.mixer.init()  # Загружаем музыкальный миксер
 width, height = 1200, 800
 screen = pygame.display.set_mode((width, height))
 running = True
@@ -13,11 +20,14 @@ running = True
 selected_province = []  # Внутриигровая информация
 countries = {}
 countries_ids = []
+sounds = {}  # Звуки
+win = False
 language = 'ru'  # Язык
 languages = {'en': 'english', 'ru': 'russian'}  # Планировались локализации но я не успел :)
 player_country = 'yue'  # Страна игрока
-divisions = []  # Дивизии  | Меню (открыты ли) \/
-menu_opened = {'division': False, 'province': False, 'diplo': False, 'country_choose': False}
+divisions = []  # Дивизии
+menu_opened = {}
+reload_menu_opened()  # Перезагрузить меню
 div_id = 0  # Последнее id дивизии
 
 
@@ -29,6 +39,12 @@ def load_image(name, colorkey=None):  # загрузка изображений
         image.set_colorkey(colorkey)
     image = image.convert_alpha()
     return image
+
+
+def load_sounds():  # Загружаем звуки
+    directory = os.path.join('data', 'sounds')
+    for sound in os.listdir(directory):
+        sounds[sound.split('.')[0]] = pygame.mixer.Sound(os.path.join('data\\sounds', sound))
 
 
 def if_there_army_in_province(pos, country=None):  # Узнаём, есть ли в провинции армия
@@ -351,7 +367,7 @@ class Provinces:
                 out_borders.append([(int(t[j * 2]), int(t[j * 2 + 1])) for j in
                                     range(int(len(t) / 2))])  # иначе добавляем
             self.out_borders.append(out_borders)  # Добавляем границы карты
-            con = sqlite3.connect("data/localisation/provs.db")
+            con = sqlite3.connect(os.path.join('data\\localisation', 'provs.db'))
             cur = con.cursor()  # Получаем название провинции
             result = cur.execute(
                 "SELECT " + languages[language] + " FROM provs WHERE id_name = " +
@@ -545,6 +561,7 @@ class Provinces:
                                        (j + 0.5) * self.cell_size), (52, 12)], 1)
 
     def update_province(self, i, prov_id):  # Изменения с провинцией
+        global time_is_running, win
         country_before = self.board[i]  # Бывший владелец
         self.board[i] = prov_id  # Новый владелец
         self.colors[i] = get_country(prov_id).get_color()  # Новый цвет
@@ -554,6 +571,17 @@ class Provinces:
         countries_ids.remove(country_before)  # Если нет, то его удаляем
         for i in countries_ids:  # И все с ним заключают мир
             peace(country_before, i)
+        if country_before == player_country:
+            reload_menu_opened()
+            menu_opened['end_game'] = True
+            time_is_running = False
+            sounds['peace'].play()
+        elif len(countries_ids) == 1:
+            reload_menu_opened()
+            win = True
+            menu_opened['end_game'] = True
+            time_is_running = False
+            sounds['win'].play()
 
     def move_units(self, mouse_pos):  # Перемещаем войска
         cell, b = self.get_cell(mouse_pos, True)
@@ -576,8 +604,8 @@ class Provinces:
                 mouse_original = pygame.Surface((1, 1), pygame.SRCALPHA)  # Временная поверхн. мыши
                 pygame.draw.polygon(mouse_original, (255, 0, 0), [(0, 0), (0, 1), (1, 1), (1, 0)])
                 provrect = prov_original.get_rect(center=(self.left + (self.provs_rect[i][0] +
-                                                              self.provs_rect[i][2] / 2) *
-                                                 self.cell_size, self.top + (  # Границы провинции
+                                                                       self.provs_rect[i][2] / 2) *
+                                                          self.cell_size, self.top + (  # Границы
                         self.provs_rect[i][1] + self.provs_rect[i][3] / 2) * self.cell_size))
                 mask_prov = pygame.mask.from_surface(prov_original)  # Маска провинции
                 mask_mouse = pygame.mask.from_surface(mouse_original)  # Маска мыши
@@ -600,9 +628,13 @@ class Provinces:
                 k.select(False)
 
     def find_path(self, country, cell, need_to_be_selected=False):  # Найти путь для дивизий
+        t = True
         for k in divisions:
             if k.country == country and (not need_to_be_selected or k.selected):
                 k.find_path(cell)
+                if t:
+                    sounds['move_order_army'].play()
+                    t = False
 
     def on_click(self, cell_coords, b):  # Что делать на щелчок
         selected_province.clear()  # Отменяем выделение
@@ -619,8 +651,11 @@ class Provinces:
                             k.select(True)  # выделяется
                             t = True
                     menu_opened['division'] = t  # Открываем меню армии (если выбраны дивизии)
+                    if t:
+                        sounds['select_army'].play()
             else:  # Иначе открываем меню провинции
                 menu_opened['province'] = True
+                sounds['click_province'].play()
 
     def actions_with_provinces(self):  # Действия с поровинциями
         for i in range(self.len_m):
@@ -793,7 +828,7 @@ class Division:  # Дивизии
 def remove_division(div):  # Уничтожение дивизии
     try:
         divisions.remove(div)
-    except:
+    except BaseException:
         pass
     finally:
         pass
@@ -855,7 +890,8 @@ def draw_province_menu():  # Рисуем нижнее меню
         happy = gamemap.happiness[selected_province[0]]
         text = font.render("Счастье: " + str(happy) + ", владелец: " + core, 1, (255, 255, 255))
         screen.blit(text, (x + 10, y))
-        if menu_opened['diplo'] and gamemap.selected_province != -1:  # Если открыто меню дипломатии
+        if menu_opened['diplo'] and gamemap.selected_province != -1 \
+                and not menu_opened['end_game']:  # Если открыто меню дипломатии
             cou = gamemap.board[gamemap.selected_province]  # Если страна не наш протишник и не мы
             if cou != player_country and cou not in countries[player_country].wars:
                 pygame.draw.rect(screen, (0, 0, 0), (width - 202, y - 10, 2, text_h + 20), 0)
@@ -868,7 +904,11 @@ def draw_date():  # Рисуем дату
     d, m, y = tuple(str(i) for i in date)
     text = font.render(d if len(d) == 2 else '0' + d, 1, (255, 255, 255))
     text_h = text.get_height()
-    pygame.draw.rect(screen, (127, 127, 127), (width - 70, 0, 70, text_h + 20), 0)
+    if time_is_running:
+        pygame.draw.rect(screen, (127, 127, 127), (width - 70, 0, 70, text_h + 20), 0)
+    else:
+        pygame.draw.rect(screen, change_color((127, 127, 127), self_change_light[0]),
+                         (width - 70, 0, 70, text_h + 20), 0)
     screen.blit(text, (width - 67, 10))
     text = font.render('.' + m if len(m) == 2 else '.0' + m, 1, (255, 255, 255))
     screen.blit(text, (width - 51, 10))
@@ -886,6 +926,33 @@ def draw_diplopatia():  # Рисуем кнопку дипломатии
         pygame.draw.rect(screen, (127, 127, 127), (width - 170, 0, 100, text_h + 20), 0)
     pygame.draw.rect(screen, (0, 0, 0), (width - 170, 0, 100, text_h + 20), 1)
     screen.blit(text, (width - 167, 10))
+
+
+def draw_endgame():  # Рисуем меню конца игры
+    font = pygame.font.Font(None, 50)
+    text = font.render('Конец игры', 1, (255, 255, 255))
+    text_w = text.get_width()
+    text_x = width / 2 - 200
+    text_y = height / 2 - 200
+    pygame.draw.rect(screen, (127, 127, 127), (text_x, text_y, 400, 400), 0)
+    pygame.draw.rect(screen, (0, 0, 0), (text_x, text_y, 400, 400), 2)
+    screen.blit(text, ((width - text_w) / 2, text_y + 20))
+    if win:
+        font = pygame.font.Font(None, 30)
+        text = font.render('Вы выиграли', 1, (255, 255, 255))
+        text_w = text.get_width()
+        screen.blit(text, ((width - text_w) / 2, text_y + 80))
+    else:
+        font = pygame.font.Font(None, 30)
+        text = font.render('Вы проиграли', 1, (255, 255, 255))
+        text_w = text.get_width()
+        screen.blit(text, ((width - text_w) / 2, text_y + 80))
+    pygame.draw.rect(screen, (63, 63, 63), (text_x + 100, text_y + 250, 200, 80), 0)
+    pygame.draw.rect(screen, (0, 0, 0), (text_x + 100, text_y + 250, 200, 80), 2)
+    font = pygame.font.Font(None, 30)
+    text = font.render('Понятно', 1, (255, 255, 255))
+    text_w = text.get_width()
+    screen.blit(text, ((width - text_w) / 2, text_y + 280))
 
 
 def draw_divisions_menu():  # Рисуем меню дивизий
@@ -1010,14 +1077,20 @@ def ai_actions():  # Действия ИИ
                     attack_enemy(i_id, j_id)
                 elif j_id != i_id and not is_at_war:  # Просто закрываем границу от соседей
                     close_borders_from_enemy(i_id, j_id, False)
-            if get_count_of_divisions_of_country(i_id)[0] > 1 or random.randint(0, 9) == 1:
+            if get_count_of_divisions_of_country(i_id)[0] > 1 or \
+                    random.randint(0, 9) == 1 and get_count_of_divisions_of_country(i_id)[0] > 0:
                 for j_id in countries_ids:  # /\ Можем ли мы воевать
-                    if random.randint(0, 100) == 1 and j_id != i_id:  # Шанс войны
+                    if random.randint(0, 100) == 1 and j_id != i_id and j_id \
+                            not in countries[i_id].wars:  # Шанс войны
                         if not is_at_war:  # Если не воюешь и имеешь границы с ним
                             if have_borders(i_id, j_id):
                                 declare_war(i_id, j_id)
+                                if j_id == player_country:
+                                    sounds['declare_war'].play()
                         elif gamemap.board[14] == j_id:  # Или он имеет столицу
                             declare_war(i_id, j_id)
+                            if j_id == player_country:
+                                sounds['declare_war'].play()
 
 
 def load_scenario(scenario_name1):  # Загрузить сценарий
@@ -1055,7 +1128,7 @@ def load_scenario(scenario_name1):  # Загрузить сценарий
 
 def load_game():  # Загружаем игру
     global gamemap, left, top, right, bottom, ZOOM, LEFT, TOP, IS_HOLDING, START_HOLDING_POS, \
-        date, game_started, div_id, menu_opened, scenario_name
+        date, game_started, div_id, menu_opened, scenario_name, win
     scenario_name = ''  # А перед этим всё обнуляем
     selected_province.clear()
     countries.clear()
@@ -1065,13 +1138,14 @@ def load_game():  # Загружаем игру
     left, top, right, bottom = gamemap.return_map_borders()
     ZOOM = 60
     LEFT, TOP = 0, 0
+    win = False
     IS_HOLDING = False
     START_HOLDING_POS = None
     date = [5, 2, 1927]
     load_scenario('The Second Yunnanese Civil War.txt')  # Загружаем сценарий
     gamemap.set_view(LEFT, TOP, ZOOM)
     game_started = False
-    menu_opened = {'division': False, 'province': False, 'diplo': False, 'country_choose': False}
+    reload_menu_opened()
     div_id = 0
 
 
@@ -1092,6 +1166,11 @@ sprite.image = pygame.transform.scale(load_image("Chinese_republic_forever.jpg")
 sprite.rect = sprite.image.get_rect()
 all_sprites.add(sprite)
 
+load_sounds()
+clock = pygame.time.Clock()
+pygame.mixer.music.load(os.path.join('data\\music', 'mymotherland.mp3'))  # Включаем музыку
+pygame.mixer.music.play()
+
 self_change_light = [0, True]  # Изменение цвета
 
 MYEVENTTYPE = 30
@@ -1099,7 +1178,7 @@ pygame.time.set_timer(MYEVENTTYPE, 20)  # Таймер
 load_game()
 
 wait_ticks = 0  # Сколько ждать тиков
-ADD_TICKS = 40  # Сколько прибавить тиков
+ADD_TICKS = 8  # Сколько прибавить тиков
 time_is_running = False  # Идёт ли игровое время
 while running:
     for event in pygame.event.get():
@@ -1115,6 +1194,8 @@ while running:
                     draw_province_menu()
                 if menu_opened['division']:  # ...меню армиии
                     draw_divisions_menu()
+                if menu_opened['end_game']:  # ...меню конца игры
+                    draw_endgame()
                 if time_is_running:  # Если идёт игровое время,
                     wait_ticks += ADD_TICKS  # то добавляем тики
                 if wait_ticks >= 200:  # Если тиков >= 200,
@@ -1124,9 +1205,13 @@ while running:
                     change_date()  # изменяется дата
                     actions_with_divisions()  # происходят действия с дивизиями
                     ai_actions()  # ИИ делает действия
-            if event.type == pygame.MOUSEBUTTONDOWN:  # Реакция на мышь
-                if event.button == 1:
-                    START_HOLDING_POS = event.pos  # Если нажата ЛКМ, то начинаем зажим
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Реакция на мышь
+                    if not(abs(event.pos[0] - width / 2) <= 200 and
+                           abs(event.pos[1] - height / 2) <= 200) or not menu_opened['end_game']:
+                        START_HOLDING_POS = event.pos  # Если нажата ЛКМ, то начинаем зажим
+                    else:
+                        START_HOLDING_POS = -1
                 elif event.button == 3:
                     gamemap.move_units(event.pos)  # Если нажата ПКМ, то перемещаем войска
                 elif event.button == 4:
@@ -1136,41 +1221,57 @@ while running:
                     if ZOOM > 60:
                         change_zoom(-2, event.pos)
             if event.type == pygame.MOUSEMOTION:  # Движение мыши
-                if START_HOLDING_POS is not None:  # Если мы зажали ЛКМ,
+                if START_HOLDING_POS is not None and START_HOLDING_POS != -1:  # Если мы зажали ЛКМ,
                     IS_HOLDING = True  # то мы двигаем экран
                     change_pos_by_holding(get_difference_between_cords(event.pos,
                                                                        START_HOLDING_POS))
                     gamemap.set_view(LEFT, TOP, ZOOM)
                     START_HOLDING_POS = event.pos
             if event.type == pygame.MOUSEBUTTONUP:  # Отжимаем мышь
-                if START_HOLDING_POS == event.pos and not IS_HOLDING:  # Если мы не перемещали экран
+                if (START_HOLDING_POS == event.pos or START_HOLDING_POS == -1) and \
+                        not IS_HOLDING:  # Если мы не перемещали экран
                     if event.pos[0] <= 100 and menu_opened['division']:  # Если открыто меню дивизий
                         select_division_from_list(event.pos[1] // 30)  # то, выбираем дивизию
+                        sounds['select_army'].play()
                     elif event.pos[1] <= 30 and event.pos[0] + 170 >= width:
                         if event.pos[0] + 70 >= width:  # Если попали по дате,
+                            sounds['click_menu'].play()
                             if not time_is_running:  # то заставляем время течь/остановиться
                                 time_is_running = True
                             else:
                                 time_is_running = False
                         else:
+                            sounds['click_menu'].play()
                             if not menu_opened['diplo']:  # иначе открываем меню дипломатии
                                 menu_opened['diplo'] = True
                             else:
                                 menu_opened['diplo'] = False
                     elif event.pos[1] + 40 >= height and menu_opened['province']:
-                        if event.pos[0] + 200 >= width and menu_opened['diplo'] and \
+                        if event.pos[0] + 200 >= width and menu_opened['diplo']\
+                                and not menu_opened['end_game'] and \
                                 gamemap.selected_province != -1 and \
                                 gamemap.board[gamemap.selected_province] != player_country and \
                                 gamemap.board[gamemap.selected_province] not in \
                                 countries[player_country].wars:  # Объявляем войну
                             declare_war(player_country, gamemap.board[gamemap.selected_province])
+                            sounds['declare_war'].play()
+                    elif abs(event.pos[0] - width / 2) <= 100 and \
+                            abs(event.pos[1] - height / 2 - 90) <= 40 and menu_opened['end_game']:
+                        self_change_light = [0, True]  # Заканчиваем игру
+                        load_game()
+                        game_started = False
+                        sprite.rect.y = 0
+                        sounds['click_window_open'].play()
+                        pygame.mixer.music.load(os.path.join('data\\music', 'mymotherland.mp3'))
+                        pygame.mixer.music.play()  # Включаем музыку
                     else:
                         gamemap.get_click(event.pos)  # Иначе делаем действие с картой
                 START_HOLDING_POS = None
                 IS_HOLDING = False
-            if event.type == pygame.KEYDOWN:  # Если нажимаем на пробел,
-                if event.key == pygame.K_SPACE:  # то заставляем время течь/остановиться
-                    if not time_is_running:
+            if event.type == pygame.KEYDOWN and not menu_opened['end_game']:
+                if event.key == pygame.K_SPACE:  # Если нажимаем на пробел,
+                    sounds['click_menu'].play()
+                    if not time_is_running:  # то заставляем время течь/остановиться
                         time_is_running = True
                     else:
                         time_is_running = False
@@ -1185,14 +1286,6 @@ while running:
                     if sprite.rect.y < height:
                         sprite.rect.y += 1  # Если задний фон не ушёл, то его опускаем
                         sprite.rect.y *= 1.2
-                    if self_change_light[1]:  # Меняем цвет
-                        self_change_light[0] = self_change_light[0] + 1
-                        if self_change_light[0] > 10:
-                            self_change_light[1] = False
-                    else:
-                        self_change_light[0] = self_change_light[0] - 1
-                        if self_change_light[0] < 1:
-                            self_change_light[1] = True
                 if event.type == pygame.MOUSEBUTTONDOWN:  # Реакция на мышь
                     if event.button == 1:
                         START_HOLDING_POS = event.pos  # Если нажата ЛКМ, то начинаем зажим
@@ -1219,6 +1312,11 @@ while running:
                                 menu_opened['province'] = False
                                 menu_opened['country_choose'] = False
                                 game_started = True  # И начинаем игру
+                                pygame.mixer.music.stop()
+                                files = os.listdir(os.path.join('data', 'music'))
+                                pygame.mixer.music.load(
+                                    os.path.join('data\\music', random.choice(files)))
+                                pygame.mixer.music.play()
                         else:
                             gamemap.get_click(event.pos)  # Иначе делаем действие с картой
                     START_HOLDING_POS = None
@@ -1228,7 +1326,21 @@ while running:
                     if 350 <= event.pos[0] <= 850 and 650 <= event.pos[1] <= 760:
                         load_game()  # Загружаем игру
                         menu_opened['country_choose'] = True  # Выбираем страну
+                        sounds['click_window_open'].play()
             all_sprites.draw(screen)  # Рисуем...
             draw()
+        if event.type == MYEVENTTYPE:
+            if not pygame.mixer.music.get_busy():  # Проигрываем музыку
+                files = os.listdir(os.path.join('data', 'music'))
+                pygame.mixer.music.load(os.path.join('data\\music', random.choice(files)))
+                pygame.mixer.music.play()
+            if self_change_light[1]:  # Меняем цвет
+                self_change_light[0] = self_change_light[0] + 1
+                if self_change_light[0] > 10:
+                    self_change_light[1] = False
+            else:
+                self_change_light[0] = self_change_light[0] - 1
+                if self_change_light[0] < 1:
+                    self_change_light[1] = True
     pygame.display.flip()
 pygame.quit()  # Закрываем игру...                                          И заканчиваем это читать
