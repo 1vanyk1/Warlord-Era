@@ -24,7 +24,7 @@ sounds = {}  # Звуки
 win = False
 language = 'ru'  # Язык
 languages = {'en': 'english', 'ru': 'russian'}  # Планировались локализации но я не успел :)
-player_country = 'yue'  # Страна игрока
+player_country = None  # Страна игрока
 divisions = []  # Дивизии
 menu_opened = {}
 reload_menu_opened()  # Перезагрузить меню
@@ -44,7 +44,7 @@ def load_image(name, colorkey=None):  # загрузка изображений
 def load_sounds():  # Загружаем звуки
     directory = os.path.join('data', 'sounds')
     for sound in os.listdir(directory):
-        sounds[sound.split('.')[0]] = pygame.mixer.Sound(os.path.join('data\\sounds', sound))
+        sounds[sound.split('.')[0]] = pygame.mixer.Sound(os.path.join('data/sounds', sound))
 
 
 def if_there_army_in_province(pos, country=None):  # Узнаём, есть ли в провинции армия
@@ -132,8 +132,12 @@ def declare_war(country1, country2):  # объявление войны country1
     country1 = get_country(country1).get_id()
     country2 = get_country(country2).get_id()
     if country2 not in countries[country1].wars:
+        if country2 == player_country:
+            sounds['declare_war'].play()
         countries[country1].wars.append(country2)
     if country1 not in countries[country2].wars:
+        if country1 == player_country:
+            sounds['declare_war'].play()
         countries[country2].wars.append(country1)
 
 
@@ -367,7 +371,7 @@ class Provinces:
                 out_borders.append([(int(t[j * 2]), int(t[j * 2 + 1])) for j in
                                     range(int(len(t) / 2))])  # иначе добавляем
             self.out_borders.append(out_borders)  # Добавляем границы карты
-            con = sqlite3.connect(os.path.join('data\\localisation', 'provs.db'))
+            con = sqlite3.connect(os.path.join('data/localisation', 'provs.db'))
             cur = con.cursor()  # Получаем название провинции
             result = cur.execute(
                 "SELECT " + languages[language] + " FROM provs WHERE id_name = " +
@@ -1085,12 +1089,8 @@ def ai_actions():  # Действия ИИ
                         if not is_at_war:  # Если не воюешь и имеешь границы с ним
                             if have_borders(i_id, j_id):
                                 declare_war(i_id, j_id)
-                                if j_id == player_country:
-                                    sounds['declare_war'].play()
                         elif gamemap.board[14] == j_id:  # Или он имеет столицу
                             declare_war(i_id, j_id)
-                            if j_id == player_country:
-                                sounds['declare_war'].play()
 
 
 def load_scenario(scenario_name1):  # Загрузить сценарий
@@ -1160,26 +1160,29 @@ def draw():  # Русуем главное меню
     screen.blit(text, (text_x, text_y))
 
 
+print(1)
 all_sprites = pygame.sprite.Group()  # Создаём группу спрайтов
 sprite = pygame.sprite.Sprite()  # Задний фон
 sprite.image = pygame.transform.scale(load_image("Chinese_republic_forever.jpg"), (width, height))
 sprite.rect = sprite.image.get_rect()
 all_sprites.add(sprite)
+print(2)
 
 load_sounds()
 clock = pygame.time.Clock()
-pygame.mixer.music.load(os.path.join('data\\music', 'mymotherland.mp3'))  # Включаем музыку
+pygame.mixer.music.load(os.path.join('data/music', 'mymotherland.mp3'))  # Включаем музыку
 pygame.mixer.music.play()
-
+print(3)
 self_change_light = [0, True]  # Изменение цвета
 
 MYEVENTTYPE = 30
 pygame.time.set_timer(MYEVENTTYPE, 20)  # Таймер
 load_game()
-
+print(4)
 wait_ticks = 0  # Сколько ждать тиков
 ADD_TICKS = 8  # Сколько прибавить тиков
 time_is_running = False  # Идёт ли игровое время
+print(5)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -1254,7 +1257,6 @@ while running:
                                 gamemap.board[gamemap.selected_province] not in \
                                 countries[player_country].wars:  # Объявляем войну
                             declare_war(player_country, gamemap.board[gamemap.selected_province])
-                            sounds['declare_war'].play()
                     elif abs(event.pos[0] - width / 2) <= 100 and \
                             abs(event.pos[1] - height / 2 - 90) <= 40 and menu_opened['end_game']:
                         self_change_light = [0, True]  # Заканчиваем игру
@@ -1262,7 +1264,7 @@ while running:
                         game_started = False
                         sprite.rect.y = 0
                         sounds['click_window_open'].play()
-                        pygame.mixer.music.load(os.path.join('data\\music', 'mymotherland.mp3'))
+                        pygame.mixer.music.load(os.path.join('data/music', 'mymotherland.mp3'))
                         pygame.mixer.music.play()  # Включаем музыку
                     else:
                         gamemap.get_click(event.pos)  # Иначе делаем действие с картой
@@ -1315,7 +1317,7 @@ while running:
                                 pygame.mixer.music.stop()
                                 files = os.listdir(os.path.join('data', 'music'))
                                 pygame.mixer.music.load(
-                                    os.path.join('data\\music', random.choice(files)))
+                                    os.path.join('data/music', random.choice(files)))
                                 pygame.mixer.music.play()
                         else:
                             gamemap.get_click(event.pos)  # Иначе делаем действие с картой
@@ -1332,7 +1334,7 @@ while running:
         if event.type == MYEVENTTYPE:
             if not pygame.mixer.music.get_busy():  # Проигрываем музыку
                 files = os.listdir(os.path.join('data', 'music'))
-                pygame.mixer.music.load(os.path.join('data\\music', random.choice(files)))
+                pygame.mixer.music.load(os.path.join('data/music', random.choice(files)))
                 pygame.mixer.music.play()
             if self_change_light[1]:  # Меняем цвет
                 self_change_light[0] = self_change_light[0] + 1
